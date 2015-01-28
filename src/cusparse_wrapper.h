@@ -56,7 +56,6 @@ typedef long long int64_t;
 # include <thrust/extrema.h>
 
 # include "cusparse.h"
-# include "cusolver.h"
 
 # define TEMP_TOL 1e-10
 
@@ -181,8 +180,6 @@ public:
 		indices_to_offsets(row_indices.begin(), row_indices.end(), m_row_offsets, m_row_offsets + (m_n + 1));
 	}
 
-	virtual bool symmetricRCM() = 0;
-
 protected:
 	bool   m_l_analyzed;
 	bool   m_u_analyzed;
@@ -194,9 +191,7 @@ protected:
 	double m_tolerance;
 
 	static cusparseHandle_t m_handle;
-	static cusolverHandle_t m_solver_handle;
 	static bool             m_handle_initialized;
-	static bool             m_solver_handle_initialized;
 
 };
 
@@ -222,11 +217,6 @@ public:
 		if (!(this->m_handle_initialized)) {
 			cusparseCreate(&m_handle);
 			this->m_handle_initialized = true;
-		}
-
-		if (!(this->m_solver_handle_initialized)) {
-			cusolverCreate(&m_solver_handle);
-			this->m_solver_handle_initialized = true;
 		}
 
 		cusparseCreateSolveAnalysisInfo(&(this->m_infoL));
@@ -261,11 +251,6 @@ public:
 			m_handle_initialized = true;
 		}
 
-		if (!m_solver_handle_initialized) {
-			cusolverCreate(&m_solver_handle);
-			m_solver_handle_initialized = true;
-		}
-
 		cusparseCreateSolveAnalysisInfo(&m_infoL);
 		cusparseCreateSolveAnalysisInfo(&m_infoU);
 		cusparseCreateMatDescr(&m_descrL);
@@ -291,11 +276,6 @@ public:
 		if (!m_handle_initialized) {
 			cusparseCreate(&m_handle);
 			m_handle_initialized = true;
-		}
-
-		if (!m_solver_handle_initialized) {
-			cusolverCreate(&m_solver_handle);
-			m_solver_handle_initialized = true;
 		}
 
 		m_row_offsets    = (int *)malloc(sizeof(int) * (N + 1));
@@ -334,85 +314,7 @@ public:
 		m_descrL = 0;
 		m_descrU = 0;
 	}
-
-	virtual bool symmetricRCM();
-	
-	template<typename DVector>
-	cusolverStatus_t QRSolve(const DVector &x, DVector &y)
-	{
-		if (y.size() != x.size())
-			y.resize(x.size());
-
-		const double *p_x = thrust::raw_pointer_cast(&x[0]);
-		double *p_y = thrust::raw_pointer_cast(&y[0]);
-
-		cusparseSetMatType(m_descrL,CUSPARSE_MATRIX_TYPE_GENERAL);
-		cusparseSetMatDiagType(m_descrL,CUSPARSE_DIAG_TYPE_NON_UNIT);
-
-		cusparseSetMatIndexBase(m_descrL,CUSPARSE_INDEX_BASE_ZERO);
-		cusparseSetMatFillMode(m_descrL, CUSPARSE_FILL_MODE_LOWER);
-
-		cusolverStatus_t status;
-
-		int singularity;
-
-		status = hsolverDcsrlsvqr(m_solver_handle, m_n, m_nnz, m_descrL, m_values, m_row_offsets, m_column_indices, p_x, m_tolerance, p_y, &singularity);
-
-		return status;
-	}
 };
-
-bool
-CuSparseCsrMatrixH::symmetricRCM()
-{
-	int is_sym = 0;
-	cusparseSetMatType(m_descrL,CUSPARSE_MATRIX_TYPE_GENERAL);
-	cusparseSetMatDiagType(m_descrL,CUSPARSE_DIAG_TYPE_NON_UNIT);
-
-	cusparseSetMatIndexBase(m_descrL,CUSPARSE_INDEX_BASE_ZERO);
-	cusparseSetMatFillMode(m_descrL, CUSPARSE_FILL_MODE_LOWER);
-
-	cusolverStatus_t status = hsolverXcsrissym(m_solver_handle, m_n, m_nnz, m_descrL, m_row_offsets, m_row_offsets + 1, m_column_indices, &is_sym);
-	if (status != CUSOLVER_STATUS_SUCCESS)
-		return false;
-
-	if (!is_sym) {
-		// TODO
-		return false;
-	}
-
-	size_t bufferSizeInBytes;
-	hsolverXcsrsymrcm_bufferSize(m_solver_handle, m_n, &bufferSizeInBytes);
-	char *pBuffer = 0;
-	pBuffer = (char *)malloc(bufferSizeInBytes);
-
-	if (pBuffer == NULL) {
-		return false;
-	}
-
-	if (is_sym) {
-		status = hsolverXcsrsymrcm(m_solver_handle, m_n, m_nnz, m_descrL, m_row_offsets, m_row_offsets + 1, m_column_indices, m_reordering, (void *)pBuffer);
-	}
-	else {
-		// TODO
-	}
-	free(pBuffer);
-
-	thrust::scatter(thrust::make_counting_iterator<int>(0),
-					thrust::make_counting_iterator<int>(m_n),
-					m_reordering,
-					m_perm);
-
-	if (status != CUSOLVER_STATUS_SUCCESS)
-		return false;
-
-	if (is_sym) {
-		matrix_transform<typename thrust::host_vector<int> >(m_perm);
-	} else {
-		// TODO
-	}
-	return true;
-}
 
 class CuSparseCsrMatrixD: public CuSparseCsrMatrix_base
 {
@@ -433,11 +335,6 @@ public:
 		if (!(this->m_handle_initialized)) {
 			cusparseCreate(&m_handle);
 			this->m_handle_initialized = true;
-		}
-
-		if (!(this->m_solver_handle_initialized)) {
-			cusolverCreate(&m_solver_handle);
-			this->m_solver_handle_initialized = true;
 		}
 
 		cusparseCreateSolveAnalysisInfo(&(this->m_infoL));
@@ -470,11 +367,6 @@ public:
 			m_handle_initialized = true;
 		}
 
-		if (!m_solver_handle_initialized) {
-			cusolverCreate(&m_solver_handle);
-			m_solver_handle_initialized = true;
-		}
-
 		cusparseCreateSolveAnalysisInfo(&m_infoL);
 		cusparseCreateSolveAnalysisInfo(&m_infoU);
 		cusparseCreateMatDescr(&m_descrL);
@@ -500,11 +392,6 @@ public:
 		if (!m_handle_initialized) {
 			cusparseCreate(&m_handle);
 			m_handle_initialized = true;
-		}
-
-		if (!m_solver_handle_initialized) {
-			cusolverCreate(&m_solver_handle);
-			m_solver_handle_initialized = true;
 		}
 
 		cudaMalloc(&m_row_offsets,   sizeof(int) * (N + 1));
@@ -623,124 +510,10 @@ public:
 
 		return status;
 	}
-
-	template<typename DVector>
-	cusolverStatus_t QRSolve(const DVector &x, DVector &y)
-	{
-		if (y.size() != x.size())
-			y.resize(x.size());
-
-		const double *p_x = thrust::raw_pointer_cast(&x[0]);
-		double *p_y = thrust::raw_pointer_cast(&y[0]);
-
-		cusparseSetMatType(m_descrL,CUSPARSE_MATRIX_TYPE_GENERAL);
-		cusparseSetMatDiagType(m_descrL,CUSPARSE_DIAG_TYPE_NON_UNIT);
-
-		cusparseSetMatIndexBase(m_descrL,CUSPARSE_INDEX_BASE_ZERO);
-		cusparseSetMatFillMode(m_descrL, CUSPARSE_FILL_MODE_LOWER);
-
-		cusolverStatus_t status;
-
-		int singularity;
-
-		status = cusolverDcsrlsvqr(m_solver_handle, m_n, m_nnz, m_descrL, m_values, m_row_offsets, m_column_indices, p_x, m_tolerance, p_y, &singularity);
-
-		return status;
-	}
-
-	virtual bool symmetricRCM();
 };
-
-bool
-CuSparseCsrMatrixD::symmetricRCM()
-{
-	int is_sym = 0;
-	cusparseSetMatType(m_descrL,CUSPARSE_MATRIX_TYPE_GENERAL);
-	cusparseSetMatDiagType(m_descrL,CUSPARSE_DIAG_TYPE_NON_UNIT);
-
-	cusparseSetMatIndexBase(m_descrL,CUSPARSE_INDEX_BASE_ZERO);
-	cusparseSetMatFillMode(m_descrL, CUSPARSE_FILL_MODE_LOWER);
-
-	// Transfer to host to do RCM
-	thrust::host_vector<int> h_row_offsets(m_n + 1);
-	thrust::host_vector<int> h_column_indices(m_nnz);
-
-	int *p_row_offsets    = thrust::raw_pointer_cast(&h_row_offsets[0]);
-	int *p_column_indices = thrust::raw_pointer_cast(&h_column_indices[0]);
-
-	cudaMemcpy(p_row_offsets, m_row_offsets, sizeof(int) * (m_n + 1), cudaMemcpyDeviceToHost);
-	cudaMemcpy(p_column_indices, m_column_indices, sizeof(int) * (m_nnz), cudaMemcpyDeviceToHost);
-
-	cusolverStatus_t status = hsolverXcsrissym(m_solver_handle, m_n, m_nnz, m_descrL, p_row_offsets, p_row_offsets + 1, p_column_indices, &is_sym);
-	if (status != CUSOLVER_STATUS_SUCCESS)
-		return false;
-
-	if (!is_sym) {
-		// TODO
-		return false;
-	}
-	thrust::host_vector<double> h_values(m_nnz);
-	thrust::host_vector<int> h_reordering(m_n);
-	thrust::host_vector<int> h_perm(m_n);
-	int *p_reordering     = thrust::raw_pointer_cast(&h_reordering[0]);
-	int *p_perm           = thrust::raw_pointer_cast(&h_perm[0]);
-	double *p_values      = thrust::raw_pointer_cast(&h_values[0]);
-	cudaMemcpy(p_values, m_values, sizeof(double) * (m_nnz), cudaMemcpyDeviceToHost);
-
-	size_t bufferSizeInBytes;
-	hsolverXcsrsymrcm_bufferSize(m_solver_handle, m_n, &bufferSizeInBytes);
-	char *pBuffer = 0;
-	pBuffer = (char *)malloc(bufferSizeInBytes);
-
-	if (pBuffer == NULL) {
-		return false;
-	}
-
-	if (is_sym) {
-		status = hsolverXcsrsymrcm(m_solver_handle, m_n, m_nnz, m_descrL, p_row_offsets, p_row_offsets + 1, p_column_indices, p_reordering, (void *)pBuffer);
-	}
-	else {
-		// TODO
-	}
-	free(pBuffer);
-
-	cudaMemcpy(m_reordering, p_reordering, sizeof(int) * m_n, cudaMemcpyHostToDevice);
-
-	thrust::scatter(thrust::make_counting_iterator<int>(0),
-					thrust::make_counting_iterator<int>(m_n),
-					p_reordering,
-					p_perm);
-	
-	cudaMemcpy(m_perm, p_perm, sizeof(int) * m_n, cudaMemcpyHostToDevice);
-
-	if (status != CUSOLVER_STATUS_SUCCESS)
-		return false;
-
-	if (is_sym) {
-		thrust::host_vector<int> row_indices(m_nnz);
-		offsets_to_indices(p_row_offsets, p_row_offsets + (m_n + 1), row_indices.begin(), row_indices.end());
-		thrust::gather(row_indices.begin(), row_indices.end(), p_perm, row_indices.begin());
-		thrust::gather(p_column_indices, p_column_indices + m_nnz, p_perm, p_column_indices);
-		thrust::sort_by_key(thrust::make_zip_iterator(thrust::make_tuple(row_indices.begin(), p_column_indices)), 
-						    thrust::make_zip_iterator(thrust::make_tuple(row_indices.end(),   p_column_indices + m_nnz)), 
-							h_values.begin()
-				);
-		indices_to_offsets(row_indices.begin(), row_indices.end(), p_row_offsets, p_row_offsets + (m_n + 1));
-
-		cudaMemcpy(m_row_offsets, p_row_offsets, sizeof(int) * (m_n + 1), cudaMemcpyHostToDevice);
-		cudaMemcpy(m_column_indices, p_column_indices, sizeof(int) * (m_nnz), cudaMemcpyHostToDevice);
-		cudaMemcpy(m_values, p_values, sizeof(double) * (m_nnz), cudaMemcpyHostToDevice);
-	} else {
-		// TODO
-	}
-	return true;
-}
 
 cusparseHandle_t CuSparseCsrMatrix_base::m_handle = 0;
 bool             CuSparseCsrMatrix_base::m_handle_initialized = false;
-cusolverHandle_t CuSparseCsrMatrix_base::m_solver_handle = 0;
-bool             CuSparseCsrMatrix_base::m_solver_handle_initialized = false;
-
 
 } // namespace cusparse
 

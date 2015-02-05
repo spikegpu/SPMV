@@ -395,13 +395,13 @@ public:
 		}
 
 		cudaMalloc(&m_row_offsets,   sizeof(int) * (N + 1));
-		cudaMemcpy(m_row_offsets, p_row_offsets, sizeof(int) * (N + 1), cudaMemcpyDeviceToDevice);
+		cudaMemcpy(m_row_offsets, p_row_offsets, sizeof(int) * (N + 1), cudaMemcpyDefault);
 
 		cudaMalloc(&m_column_indices, sizeof(int) * nnz);
-		cudaMemcpy(m_column_indices, p_column_indices, sizeof(int) * nnz, cudaMemcpyDeviceToDevice);
+		cudaMemcpy(m_column_indices, p_column_indices, sizeof(int) * nnz, cudaMemcpyDefault);
 
 		cudaMalloc(&m_values,         sizeof(double) * nnz);
-		cudaMemcpy(m_values, p_values, sizeof(double) * nnz, cudaMemcpyDeviceToDevice);
+		cudaMemcpy(m_values, p_values, sizeof(double) * nnz, cudaMemcpyDefault);
 
 		cudaMalloc(&m_perm,           sizeof(int) * N);
 		cudaMalloc(&m_reordering,     sizeof(int) * N);

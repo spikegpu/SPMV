@@ -45,3 +45,15 @@ void read_mm_matrix_coo(const std::string& fileMat, int &N, int &NNZ, unsigned* 
 	N   = A.num_rows;
 	NNZ = A.num_entries;
 }
+
+void read_mm_vector(const std::string& fileVec, double *&values)
+{
+	cusp::array1d<double, cusp::host_memory> v;
+	cusp::io::read_matrix_market_file(v, fileVec);
+
+	size_t v_size = v.size();
+	values = new double [v_size];
+
+	for (int i = 0; i < v_size; i++)
+		values[i] = v[i];
+}
